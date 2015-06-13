@@ -1,4 +1,3 @@
-
 /*
  Author: Antoine Arlaud
  Based on work from author:  Eric Tsai
@@ -90,7 +89,10 @@ void MQTTSendULong(PubSubClient* _client, int node, int sensor, int var, unsigne
 void MQTTSendFloat(PubSubClient* _client, int node, int sensor, int var, float val);
 void MQTTSendInfo(PubSubClient* _client, int accountID, int gatewayID, int nodeID, int sensorID, float sensorValue);
 //use LED for indicating MQTT connection status.
-int led = 13;
+int led = 7;
+int radioLed = 6;
+int mqttConnectLed = 5;
+int mqttConnectActivityLed = 3;
 
 typedef struct {
   int                   nodeID;
@@ -115,6 +117,11 @@ SensorNode;
 
 void setup()
 {
+  pinMode(led, OUTPUT);
+  pinMode(radioLed, OUTPUT);
+  pinMode(mqttConnectLed,OUTPUT);
+  pinMode(mqttConnectActivityLed,OUTPUT);
+  digitalWrite(led, HIGH);
   //Serial.begin(SERIAL_BAUD);
 
   //Ethernet -------------------------
@@ -169,14 +176,17 @@ void setup()
 
   // DEBUGLN1("setup complete");
 //  Serial.println("Setup completed");
+digitalWrite(led, LOW);
+
 }  // end of setup
 
 byte ackCount = 0;
 long watchdogInterval = 10000;
 long watchdog = 0;
-
+boolean ledon=false;
 
 void loop() {
+  //digitalWrite(led, HIGH);
 
   // calling client.loop too often block the system at some point quite early (~up to 5 loop)
   // Here is a temporized call to it on a regular interval
@@ -185,8 +195,17 @@ void loop() {
         //Serial.println("watchdog loop");
     //    Serial.println(millis());
     watchdog += watchdogInterval;
+    if(ledon==false){
+      digitalWrite(led, HIGH);
+      ledon=true;
+    }else{
+       digitalWrite(led, LOW);
+       ledon=false;
+    }
     //client.loop needs to run every iteration.  Previous version did not.  Big opps.
+    //digitalWrite(led, HIGH);
     client.loop();
+    //digitalWrite(led, LOW);
     //DEBUGLN1("Waiting for client");
   }
  // Serial.println("After watchdog loop");
@@ -234,7 +253,9 @@ void loop() {
     {
       //DEBUGLN1("radio ack requested");
       byte theNodeID = radio.SENDERID;
+      digitalWrite(radioLed, HIGH);
       radio.sendACK();
+      digitalWrite(radioLed, LOW);
       // DEBUGLN1("radio ack sent");
       // When a node requests an ACK, respond to the ACK
       // and also send a packet requesting an ACK (every 3rd one only)
@@ -256,20 +277,23 @@ void loop() {
     //  DEBUGLN1("starting MQTT send");
 
     if (!client.connected()) {
+      digitalWrite(mqttConnectLed, HIGH);
       while (client.connect(MQTT_CLIENT_ID) != 1)
       {
-        digitalWrite(led, LOW);
+
         //      DEBUGLN1("Error connecting to MQTT");
-        Serial.println("Reconnecting to MQTT");
+        //Serial.println("Reconnecting to MQTT");
+       digitalWrite(mqttConnectActivityLed, HIGH);
         delay(MQTT_RETRY);
-        digitalWrite(led, HIGH);
+       digitalWrite(mqttConnectActivityLed, LOW);
       }
+      digitalWrite(mqttConnectLed, LOW);
       client.publish("outTopic", "hello world");
     }
     
      
 
-    digitalWrite(led, HIGH);
+    //digitalWrite(led, HIGH);
 
     int varnum;
     char buff_topic[6];
@@ -314,7 +338,7 @@ void loop() {
     */
     sendMQTT = 0;
     //  DEBUGLN1("finished MQTT send");
-    digitalWrite(led, LOW);
+    //digitalWrite(led, LOW);
   }//end if sendMQTT
 }//end loop
 
@@ -359,4 +383,3 @@ void callback(char* topic, byte* payload, unsigned int length) {
   // handle message arrived
   // DEBUGLN1(F("Mosquitto Callback"));
 }
-
