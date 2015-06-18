@@ -254,7 +254,8 @@ void loop() {
       //DEBUGLN1("radio ack requested");
       byte theNodeID = radio.SENDERID;
       digitalWrite(radioLed, HIGH);
-      radio.sendACK();
+      //radio.sendACK();
+      delay(100);
       digitalWrite(radioLed, LOW);
       // DEBUGLN1("radio ack sent");
       // When a node requests an ACK, respond to the ACK
@@ -373,7 +374,7 @@ void MQTTSendInfo(PubSubClient* _client, int accountID, int gatewayID, int nodeI
   char buff_topic[10];
   char buff_message[12];
 
-  sprintf(buff_topic, "%04d%03d%02d%01d", accountID, gatewayID, nodeID, sensorID);
+  sprintf(buff_topic, "%04d/%03d/%02d/%01d", accountID, gatewayID, nodeID, sensorID);
   dtostrf (sensorValue, 2, 1, buff_message);
   _client->publish(buff_topic, buff_message);
 }
