@@ -3,6 +3,8 @@
  Based on work from author:  Eric Tsai
  Gateway incorporating both the RFM69 and the ethernet part
  Revised by Alexandre Bouillot
+ Using RFM69HW library from Felix with pull request from kiwisincebirth to support
+ SPI transactions causing SPI bus shared usage crash.
 
  License:  CC-BY-SA, https://creativecommons.org/licenses/by-sa/2.0/
  Date:  11-8-2014
@@ -32,16 +34,16 @@ Ethernet Pinout:
  */
 
 //general --------------------------------
-//#define SERIAL_BAUD   115200
-//#if 1
-//#define DEBUG1(expression)  Serial.print(expression)
-//#define DEBUG2(expression, arg)  Serial.print(expression, arg)
-//#define DEBUGLN1(expression)  Serial.println(expression)
-//#else
-//#define DEBUG1(expression)
-//#define DEBUG2(expression, arg)
-//#define DEBUGLN1(expression)
-//#endif
+#define SERIAL_BAUD   115200
+#if 1
+#define DEBUG1(expression)  Serial.print(expression)
+#define DEBUG2(expression, arg)  Serial.print(expression, arg)
+#define DEBUGLN1(expression)  Serial.println(expression)
+#else
+#define DEBUG1(expression)
+#define DEBUG2(expression, arg)
+#define DEBUGLN1(expression)
+#endif
 //RFM69  ----------------------------------
 #include <RFM69.h>
 #include <SPI.h>
@@ -55,7 +57,7 @@ Ethernet Pinout:
 #define ENCRYPTKEY    "xxxxxxxxxxxxxxxx" //exactly the same 16 characters/bytes on all nodes!
 #define IS_RFM69HW    //uncomment only for RFM69HW! Leave out if you have RFM69W!
 #define ACK_TIME      80 // max # of ms to wait for an ack
-#define RFM69_SS  8
+#define RFM69_SS  7
 RFM69 radio(RFM69_SS);
 
 bool promiscuousMode = false; //set to 'true' to sniff all packets on the same network
@@ -89,7 +91,7 @@ void MQTTSendULong(PubSubClient* _client, int node, int sensor, int var, unsigne
 void MQTTSendFloat(PubSubClient* _client, int node, int sensor, int var, float val);
 void MQTTSendInfo(PubSubClient* _client, int accountID, int gatewayID, int nodeID, int sensorID, float sensorValue);
 //use LED for indicating MQTT connection status.
-int led = 7;
+int led = 9;
 int radioLed = 6;
 int mqttConnectLed = 5;
 int mqttConnectActivityLed = 3;
@@ -122,11 +124,11 @@ void setup()
   pinMode(mqttConnectLed,OUTPUT);
   pinMode(mqttConnectActivityLed,OUTPUT);
   digitalWrite(led, HIGH);
-  //Serial.begin(SERIAL_BAUD);
+  Serial.begin(SERIAL_BAUD);
 
   //Ethernet -------------------------
   //Ethernet.begin(mac, ip);
-  //Serial.println("Booting up");
+  DEBUGLN1("Booting up");
   //Serial.println("Deselecting SD card");
   pinMode(SDCARD_CS, OUTPUT);
   digitalWrite(SDCARD_CS, HIGH); //Deselect the SD card
@@ -134,34 +136,34 @@ void setup()
   pinMode(RFM69_SS, OUTPUT);
   digitalWrite(RFM69_SS, HIGH); //Deselect the SD card
 
-  //Serial.println("Getting IP via DHCP");
+  DEBUGLN1("Getting IP via DHCP");
   //wait for IP address
   if (Ethernet.begin(mac) == 0) {
-    // DEBUGLN1("Error getting IP address via DHCP, trying again...");
+     DEBUGLN1("Error getting IP address via DHCP, trying again...");
     for (;;)
       ;
   }
 
-  // DEBUGLN1("ethernet OK");
+   DEBUGLN1("ethernet OK");
   // print your local IP address:
-  // DEBUGLN1("My IP address: ");
+   DEBUGLN1("My IP address: ");
   for (byte thisByte = 0; thisByte < 4; thisByte++) {
     // print the value of each byte of the IP address:
-    //  DEBUG2(Ethernet.localIP()[thisByte], DEC);
-    //  DEBUG1(".");
+     DEBUG2(Ethernet.localIP()[thisByte], DEC);
+     DEBUG1(".");
   }
-  // DEBUGLN1();
+   DEBUGLN1();
 
-//Serial.println("Passed EthernetIP");
+Serial.println("Passed EthernetIP");
 
   // Mosquitto ------------------------------
   while (client.connect(MQTT_CLIENT_ID) != 1) {
-    //  DEBUGLN1("Error connecting to MQTT");
+      DEBUGLN1("Error connecting to MQTT");
     //Serial.println("Connecting to MQTT in setup");
     delay(MQTT_RETRY);
   }
 
-//Serial.println("Passed MQTT Connection");
+DEBUGLN1("Passed MQTT Connection");
   //RFM69 ---------------------------
 
   radio.initialize(FREQUENCY, NODEID, NETWORKID);
@@ -172,9 +174,9 @@ void setup()
   radio.promiscuous(promiscuousMode);
   char buff[50];
   sprintf(buff, "\nListening at %d Mhz...", FREQUENCY == RF69_433MHZ ? 433 : FREQUENCY == RF69_868MHZ ? 868 : 915);
-  // DEBUGLN1(buff);
+   DEBUGLN1(buff);
 
-  // DEBUGLN1("setup complete");
+   DEBUGLN1("setup complete");
 //  Serial.println("Setup completed");
 digitalWrite(led, LOW);
 
@@ -195,6 +197,9 @@ void loop() {
         //Serial.println("watchdog loop");
     //    Serial.println(millis());
     watchdog += watchdogInterval;
+    char buf[50];
+    ltoa(watchdog,buf,10);
+    client.publish("$GWSYS/Watchdog/Value", buf);
     if(ledon==false){
       digitalWrite(led, HIGH);
       ledon=true;
@@ -211,15 +216,15 @@ void loop() {
  // Serial.println("After watchdog loop");
   delay(400);
   if (radio.receiveDone()) {
-    //  DEBUG1('[');
-    //  DEBUG2(radio.SENDERID, DEC);
-    //  DEBUG1("] ");
+      DEBUG1('[');
+      DEBUG2(radio.SENDERID, DEC);
+      DEBUG1("] ");
     if (promiscuousMode) {
-      //    DEBUG1("to [");
-      //    DEBUG2(radio.TARGETID, DEC);
-      //    DEBUG1("] ");
+          DEBUG1("to [");
+          DEBUG2(radio.TARGETID, DEC);
+          DEBUG1("] ");
     }
-    //  DEBUGLN1();
+      DEBUGLN1();
 
     if (radio.DATALEN != sizeof(Payload)) {
       //   Serial.println(F("Invalid payload received, not matching Payload struct!"));
@@ -234,7 +239,7 @@ void loop() {
       SensorNode.var3_float = theData.var3_float;
       SensorNode.var4_int = radio.RSSI;
 
-      /*    DEBUG1("Received Device ID = ");
+          DEBUG1("Received Device ID = ");
           DEBUGLN1(SensorNode.sensorID);
           DEBUG1 ("    Time = ");
           DEBUGLN1 (SensorNode.var1_usl);
@@ -244,18 +249,18 @@ void loop() {
           DEBUGLN1 (SensorNode.var3_float);
           DEBUG1 ("    RSSI ");
           DEBUGLN1 (SensorNode.var4_int);
-      */
+      
       sendMQTT = 1;
     }
 
 
     if (radio.ACK_REQUESTED)
     {
-      //DEBUGLN1("radio ack requested");
+      DEBUGLN1("radio ack requested");
       byte theNodeID = radio.SENDERID;
       digitalWrite(radioLed, HIGH);
-      //radio.sendACK();
-      delay(100);
+      radio.sendACK();
+      delay(500);
       digitalWrite(radioLed, LOW);
       // DEBUGLN1("radio ack sent");
       // When a node requests an ACK, respond to the ACK
